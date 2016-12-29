@@ -1,0 +1,41 @@
+{
+  "name": "stale-state",
+  "version": "1.0.0",
+  "description": "Detect possible stale data and reach consensus expected data",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha --compilers js:babel-register test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/destinythegame/stale-state.git"
+  },
+  "keywords": [
+    "state",
+    "stale",
+    "data",
+    "consensus"
+  ],
+  "author": "Arnout Kazemier",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/destinythegame/stale-state/issues"
+  },
+  "homepage": "https://github.com/destinythegame/stale-state#readme",
+  "dependencies": {
+    "babel-preset-es2015": "6.18.x",
+    "diagnostics": "1.1.x",
+    "one-time": "0.0.x"
+  },
+  "babel-ignore": false,
+  "babel": {
+    "presets": [
+      "babel-preset-es2015"
+    ]
+  },
+  "devDependencies": {
+    "assume": "1.4.x",
+    "babel-register": "6.18.x",
+    "mocha": "3.2.x"
+  }
+}
