@@ -10,8 +10,8 @@ import once from 'one-time';
  */
 export default class Stale {
   constructor(options = {}) {
+    this.previously = null;       // Previously stored data set for comparison.
     this.name = undefined;        // Name of the stale instance.
-    this.previously = {};         // Previously stored data set for comparison.
     this.requests = 6;            // Amount of requests we make to check majority.
 
     //
@@ -60,14 +60,16 @@ export default class Stale {
    * @public
    */
   compare(data) {
-    this.callbacks.compare(this.previously, data, {
+    const previously = this.previously;
+
+    this.callbacks.compare(previously, data, {
       accept: once(() => {
         this.save(data);
       }),
 
       decline: once(() => {
         this.debug('received data was declined, starting verification');
-        this.verify(data, (err, allowed) => {
+        this.verify(previously, (err, allowed) => {
           if (allowed) {
             this.debug('verification decided that the declined is was correct after all');
             return this.save(data);
