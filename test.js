@@ -150,8 +150,27 @@ describe('stale-state', function () {
     });
 
     describe('.decline', function () {
-      it('starts the verify process');
-      it('stores the data when verify process results in allowed');
+      it('accepts the declined data if the server returns it consistently', function (next) {
+        stale.previously = { value: 8 };
+
+        stale.commit(function (data) {
+          assume(data.value).equals(5);
+          next();
+        });
+
+        stale.check(function (previously, current, state) {
+          if (previously.value === current.value) return state.same();
+
+          if (previously.value < current.value) state.accept();
+          else state.decline();
+        });
+
+        stale.request((next) => {
+          next(undefined, { value: 5 });
+        });
+
+        stale.fetch();
+      });
     });
 
     describe('.same', function () {
@@ -171,6 +190,28 @@ describe('stale-state', function () {
 
         stale.compare({ value: 8 });
       });
+    });
+
+    it('correctly handles a stale server response', function () {
+      const responses = [{ value: 9 }, { value: 8 }, { value: 9 }, { value: 8 }, { value: 9}, { value: 9 }, { value: 9 }, { value: 9}, { value: 9} ];
+      stale.previously = { value: 8 };
+
+      stale.commit(function (data) {
+        assume(data.value).equals(9);
+      });
+
+      stale.check(function (previously, current, state) {
+        if (previously.value === current.value) return state.same();
+        if (previously.value < current.value) return state.accept();
+
+        state.decline();
+      });
+
+      stale.request((next) => {
+        next(undefined, responses.shift());
+      });
+
+      stale.fetch();
     });
   });
 
