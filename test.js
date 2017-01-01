@@ -10,6 +10,10 @@ describe('stale-state', function () {
     });
   });
 
+  it('can be constructed without options', function () {
+    stale = new Stale();
+  });
+
   describe('.prevously', function () {
     it('does not have any previous datat stored', function () {
       assume(stale.previously).is.a('null');
@@ -62,8 +66,10 @@ describe('stale-state', function () {
       done = assume.wait(7, done);
 
       stale.check(function (previous, currently, state) {
-        if (currently.data > previous.data) state.accept();
-        else state.decline();
+        if (currently.data === previous.data) return state.same();
+        if (currently.data > previous.data) return state.accept();
+
+        state.decline();
       });
 
       stale.request(function (next) {
@@ -73,26 +79,52 @@ describe('stale-state', function () {
         }, 0);
       });
 
-      stale.verify({ data: 0 }, function (err, correct) {
-        assume(correct).is.true();
+      stale.verify({ data: 0 }, function (err, results) {
+        assume(results).is.a('object');
+        assume(results.accept).equals(6);
+
         done();
       });
     });
 
-    it('can decline the data', function (next) {
+    it('can flag as same', function (next) {
       stale.check(function (previous, currently, state) {
-        if (currently.data > previous.data) state.accept();
-        else state.decline();
+        if (currently.data === previous.data) return state.same();
+        if (currently.data > previous.data) return state.accept();
+
+        state.decline();
       });
 
       stale.request(function (next) {
         setTimeout(function () {
-          next(undefined, { data: 0 });
+          next(undefined, { data: -1 });
         }, 0);
       });
 
-      stale.verify({ data: 0 }, function (err, correct) {
-        assume(correct).is.false();
+      stale.verify({ data: 0 }, function (err, results) {
+        assume(results).is.a('object');
+        assume(results.decline).equals(6);
+        next();
+      });
+    })
+
+    it('can decline the data', function (next) {
+      stale.check(function (previous, currently, state) {
+        if (currently.data === previous.data) return state.same();
+        if (currently.data > previous.data) return state.accept();
+
+        state.decline();
+      });
+
+      stale.request(function (next) {
+        setTimeout(function () {
+          next(undefined, { data: -1 });
+        }, 0);
+      });
+
+      stale.verify({ data: 0 }, function (err, results) {
+        assume(results).is.a('object');
+        assume(results.decline).equals(6);
         next();
       });
     });
@@ -120,6 +152,97 @@ describe('stale-state', function () {
     describe('.decline', function () {
       it('starts the verify process');
       it('stores the data when verify process results in allowed');
+    });
+
+    describe('.same', function () {
+      it('does not trigger a commit', function () {
+        stale.previously = { value: 8 };
+
+        stale.commit(function (data) {
+          throw new Error('I should no commit changes as data is the same');
+        });
+
+        stale.check(function (previously, current, state) {
+          if (previously.value === current.value) return state.same();
+          if (previously.value < current.value) return state.accept();
+
+          state.decline();
+        });
+
+        stale.compare({ value: 8 });
+      });
+    });
+  });
+
+  describe('#fetch', function () {
+    it('calls the request method', function (next) {
+      stale.request(() => {
+        next();
+      });
+
+      stale.fetch();
+    });
+
+    it('compares and commits the result', function (next) {
+      next = assume.plan(2, next);
+
+      stale
+      .commit((data) => {
+        assume(data).equals(100);
+        next();
+      })
+      .check((prev, next, state) => {
+        assume(next).equals(100);
+        state.accept();
+      });
+
+      stale.request((next) => {
+        next(undefined, 100)
+      });
+
+      stale.fetch();
+    });
+
+    it('triggers error calback on request failure', function (next) {
+      stale.error((err) => {
+        assume(err.message).equals('testing onerror');
+        next();
+      });
+
+      stale.request((next) => {
+        next(new Error('testing onerror'));
+      });
+
+      stale.fetch();
+    });
+
+    it('calls fetch automatically at an interval after first call', function (done) {
+      stale = new Stale({ interval: 10 });
+      stale.commit((data) => {
+        assume(data).is.a('number');
+      })
+      .check((prev, next, state) => {
+        assume(next).is.a('number');
+        state.accept();
+      });
+
+      const start = Date.now();
+      let calls = 0;
+
+      stale.request((next) => {
+        calls++;
+
+        next(undefined, calls);
+
+        if (calls === 4) {
+          stale.timer.clear('interval');
+
+          assume((Date.now() - start)/ 4).is.between(8, 12);
+          done();
+        }
+      });
+
+      stale.fetch();
     });
   });
 

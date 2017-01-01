@@ -1,4 +1,5 @@
 import diagnostics from 'diagnostics';
+import TickTock from 'tick-tock';
 import once from 'one-time';
 
 /**
@@ -13,6 +14,7 @@ export default class Stale {
     this.previously = null;       // Previously stored data set for comparison.
     this.name = undefined;        // Name of the stale instance.
     this.requests = 6;            // Amount of requests we make to check majority.
+    this.interval = 0;            // Fetch interval.
 
     //
     // Merge options with our defaults.
@@ -21,11 +23,8 @@ export default class Stale {
       this[key] = options[key];
     });
 
-    //
-    // Our debug instance so we can provide some insight in the decision making
-    // process.
-    //
     this.debug = diagnostics(['stale-state', this.name].filter(Boolean).join(':'));
+    this.timer = new TickTock(this);
 
     //
     // The various of callbacks that we use to gather and transfer our checked
@@ -67,9 +66,41 @@ export default class Stale {
         this.save(data);
       }),
 
+      same: once(() => {
+        this.debug('the received state was the same, ignoring change');
+      }),
+
       decline: once(() => {
         this.debug('received data was declined, starting verification');
-        this.verify(previously, (err, allowed) => {
+
+        //
+        // We are verifying if our previously declined state is really declined
+        // because it's a flux caused by a out of date server response or if the
+        // servers are actually all updated with this new state.
+        //
+        // 1: majority(same) All servers are returning exactly the same result
+        //    so this should be seen as the new state.
+        //
+        // 2: majority(decline) All servers are seeing other out of date
+        //    responses. Ignore it for now.
+        //
+        // 3: majority(accept) Actually the calls are seeing better results now.
+        //    So lets initialize a new fetch and attempt to use that as new state.
+        //
+        //  Unhanded conditions, no majority or consensus has been reached. We
+        //  ignore the data change.
+        //
+        this.verify(previously, (err, results) => {
+          if (this.majority(results.same)) {
+            this.debug('the results that we got back are the same');
+            return;
+          }
+
+          if (this.majority(results.decline)) {
+            this.debug('majority of the requests are also declining so it must be the new server state');
+            return this.save(data);
+          }
+
           if (allowed) {
             this.debug('verification decided that the declined is was correct after all');
             return this.save(data);
@@ -92,8 +123,9 @@ export default class Stale {
    */
   verify(previously, next) {
     let requested = this.requests;        // Amount of requests we need to make.
-    let incorrect = 0;                    // Amount of requests that decremented.
-    let correct = 0;                      // Amount of requests that incremented.
+    let decline = 0;                      // Amount of requests that incremented.
+    let accept = 0;                       // Amount of requests that decremented.
+    let same = 0;                         // Data was the same.
 
     /**
      * Small async iterator that executes the required requests in series. If we
@@ -106,8 +138,12 @@ export default class Stale {
      */
     const again = () => {
       if (!requested) {
-        this.debug('verification step complete. %s correct, %s incorrect', correct, incorrect);
-        return next(undefined, this.majority(correct));
+        this.debug('verification step complete. %s accept, %s decline, %s same', accept, decline, same);
+        return next(undefined, {
+          decline: decline,
+          accept: accept,
+          same: same
+        });
       }
 
       this.debug('starting verification request %s', requested);
@@ -115,19 +151,24 @@ export default class Stale {
 
       this.callbacks.request((err, data) => {
         if (err) {
-          incorrect++;
+          decline++;
           this.debug('received an error while requesting data for verify, marking as incorrect', err);
           return again();
         }
 
         this.callbacks.compare(previously, data, {
           accept: once(() => {
-            correct++;
+            accept++;
+            again();
+          }),
+
+          same: once(() => {
+            same++;
             again();
           }),
 
           decline: once(() => {
-            incorrect++;
+            decline++;
             again();
           })
         });
@@ -152,6 +193,17 @@ export default class Stale {
 
       this.compare(data);
     });
+
+    //
+    // We are supposed to run at an interval. But it could be that we're called
+    // before the interval would be called so we need to cancel it and start
+    // again so it fetches again after the specified amount.
+    //
+    if (this.interval) {
+      this.timer
+      .clear('interval')
+      .setTimeout('interval', this.fetch, this.interval);
+    }
 
     return this;
   }
