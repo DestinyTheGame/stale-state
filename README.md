@@ -1,6 +1,12 @@
 # stale-state
 
+A helper library to deal with servers that occasionally return stale data as a
+response. This can be problematic if you use the server state to update a UI and
+it switches between old and new state.
+
 ## Install
+
+The module is released in to the public npm registry and can be installed using:
 
 ```
 npm install --save stale-state
@@ -12,6 +18,14 @@ npm install --save stale-state
 import StaleState from 'stale-state';
 const stale = new StaleState({ /* options here */ });
 ```
+
+The following options are accepted:
+
+- `previously` Allows you to set an initial state.
+- `name` Name of the instance. Used in our debug output.
+- `requests` The amount of `requests` need to be made to validate if declined
+  data is really out of data.
+- `interval` Interval for the `fetch` function.
 
 ### request
 
@@ -45,6 +59,17 @@ stale.check((previous, current, state) => {
 
   state.decline();
 });
+```
+
+### fetch
+
+Start fetching data. This calls the `request` method and starts processing the
+data using the `check` method. If an interval is set in the options it will also
+start a new interval so your data will be fetched continuously if you need to
+poll a specific endpoint.
+
+```js
+stale.fetch();
 ```
 
 ### commit
