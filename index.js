@@ -32,9 +32,9 @@ export default class Stale {
     // assume that developers set them using an API.
     //
     this.callbacks = {
-      commit: () => { throw new Error('Missing commit callback'); },
       compare: () => { throw new Error('Missing compare callback'); },
       request: () => { throw new Error('Missing request callback'); },
+      commit: () => { throw new Error('Missing commit callback'); },
       error: () => { /* errors are swallowed by default */ }
     };
   }
@@ -101,12 +101,11 @@ export default class Stale {
             return this.save(data);
           }
 
-          if (allowed) {
-            this.debug('verification decided that the declined is was correct after all');
-            return this.save(data);
+          if (this.majority(results.accept)) {
+            return this.fetch();
           }
 
-          this.debug('declined stale data');
+          this.debug('received inconsistent server responses, ignoring for now');
         });
       })
     });
