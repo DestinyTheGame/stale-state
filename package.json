@@ -28,7 +28,7 @@
     "babel-preset-es2015": "6.18.x",
     "diagnostics": "1.1.x",
     "one-time": "0.0.x",
-    "tick-tock": "1.0.x"
+    "tick-tock": "~1.0.0"
   },
   "babel-ignore": false,
   "babel": {
